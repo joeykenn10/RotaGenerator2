@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Care Home Rota Generator</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid black;
+            text-align: center;
+            padding: 8px;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        td.light-pink {
+            background-color: #ffcccb; /* Light pink for 08:00-15:00 */
+        }
+        td.light-blue {
+            background-color: #add8e6; /* Light blue for 15:00-22:00 */
+        }
+        td.half-pink-half-blue {
+            background: linear-gradient(to bottom, #ffcccb 50%, #add8e6 50%); /* 08:00-22:00 */
+        }
+        td.green {
+            background-color: #90ee90; /* Light green for night shifts (N) */
+        }
+        td.white {
+            background-color: #ffffff; /* White for rest days (R) */
+        }
+    </style>
+</head>
+<body>
+    <h1>Care Home Rota Generator</h1>
+
+    <!-- Form for care home details -->
+    <h2>Care Home Details</h2>
+    <form id="careHomeForm">
+        <label for="care_home_name">Care Home Name:</label>
+        <input type="text" id="care_home_name" required><br><br>
+        
+        <label for="day_care_hours">Total Weekly Day Care Hours:</label>
+        <input type="number" id="day_care_hours" required><br><br>
+
+        <label for="night_care_hours">Total Weekly Night Care Hours:</label>
+        <input type="number" id="night_care_hours" required><br><br>
+
+        <label for="day_minimum">Minimum Day Staff:</label>
+        <input type="number" id="day_minimum" value="4" required><br><br>
+
+        <label for="day_maximum">Maximum Day Staff:</label>
+        <input type="number" id="day_maximum" value="6" required><br><br>
+
+        <label for="night_minimum">Minimum Night Staff:</label>
+        <input type="number" id="night_minimum" value="2" required><br><br>
+
+        <button type="button" onclick="saveCareHomeDetails()">Save Care Home Details</button>
+    </form>
+
+    <!-- Form for adding staff details -->
+    <h2>Staff Details</h2>
+    <div id="staffFormsContainer"></div>
+    <button type="button" onclick="addStaffForm()">Add Another Staff</button>
+    <button type="button" onclick="saveStaff()">Save Staff</button>
+
+    <button onclick="generateRota()">Generate Rota</button>
+
+    <h2>Generated Rota</h2>
+    <div id="rotaOutput"></div>
+
+    <script>
+        let careHomeDetails = {};
+        let staffList = [];
+
+        function saveCareHomeDetails() {
+            careHomeDetails = {
+                care_home_name: document.getElementById("care_home_name").value,
+                day_care_hours: parseInt(document.getElementById("day_care_hours").value),
+                night_care_hours: parseInt(document.getElementById("night_care_hours").value),
+                day_minimum: parseInt(document.getElementById("day_minimum").value),
+                day_maximum: parseInt(document.getElementById("day_maximum").value),
+                night_minimum: parseInt(document.getElementById("night_minimum").value),
+            };
+            alert("Care home details saved successfully!");
+        }
+
+        function addStaffForm() {
+            const container = document.getElementById("staffFormsContainer");
+            const newForm = document.createElement("form");
+            newForm.classList.add("staffForm");
+            newForm.innerHTML = `
+                <label>Staff Name:</label>
+                <input type="text" class="name" required><br><br>
+
+                <label>Contracted Hours:</label>
+                <input type="number" class="contract_hours" required><br><br>
+
+                <label>Driver:</label>
+                <select class="is_driver">
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                </select><br><br>
+
+                <label>Shift Preference:</label>
+                <select class="shift_preference">
+                    <option value="Day">Day</option>
+                    <option value="Night">Night</option>
+                </select><br><br>
+                <hr>
+            `;
+            container.appendChild(newForm);
+        }
+
+        function saveStaff() {
+            const forms = document.querySelectorAll(".staffForm");
+            staffList = [];
+            forms.forEach((form) => {
+                const name = form.querySelector(".name").value;
+                const contract_hours = parseInt(form.querySelector(".contract_hours").value);
+                const is_driver = form.querySelector(".is_driver").value === "true";
+                const shift_preference = form.querySelector(".shift_preference").value;
+
+                staffList.push({ name, contract_hours, is_driver, shift_preference });
+            });
+            alert("Staff details saved successfully!");
+        }
+
+        function generateRota() {
+            const rotaContainer = document.getElementById("rotaOutput");
+            rotaContainer.innerHTML = ""; // Clear previous output
+
+            const weeks = 4;
+            const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+            const shifts = [
+                { label: "08:00-15:00", class: "light-pink", hours: 7 },
+                { label: "15:00-22:00", class: "light-blue", hours: 7 },
+                { label: "08:00-22:00", class: "half-pink-half-blue", hours: 14 }
+            ];
+
+            const nightShift = { label: "N", class: "green", hours: 10 };
+
+            for (let week = 1; week <= weeks; week++) {
+                const table = document.createElement("table");
+                const headerRow = document.createElement("tr");
+
+                headerRow.innerHTML = `
+                    <th>Staff Name</th>
+                    <th>Contracted Hours</th>
+                    ${days.map(day => `<th>${day}</th>`).join("")}
+                `;
+                table.appendChild(headerRow);
+
+                let totalDayCareHours = careHomeDetails.day_care_hours;
+                let totalNightCareHours = careHomeDetails.night_care_hours;
+
+                staffList.forEach((staff) => {
+                    const row = document.createElement("tr");
+                    const shiftsAssigned = [];
+                    let hoursRemaining = staff.contract_hours;
+
+                    days.forEach((_, dayIndex) => {
+                        if (staff.shift_preference === "Night" && totalNightCareHours > 0) {
+                            shiftsAssigned.push({ text: nightShift.label, class: nightShift.class });
+                            hoursRemaining -= nightShift.hours;
+                            totalNightCareHours -= nightShift.hours;
+                        } else if (staff.shift_preference === "Day" && totalDayCareHours > 0) {
+                            const shift = shifts[Math.floor(Math.random() * shifts.length)];
+                            shiftsAssigned.push({ text: shift.label, class: shift.class });
+                            hoursRemaining -= shift.hours;
+                            totalDayCareHours -= shift.hours;
+                        } else {
+                            shiftsAssigned.push({ text: "R", class: "white" });
+                        }
+                    });
+
+                    row.innerHTML = `
+                        <td>${staff.name}</td>
+                        <td>${staff.contract_hours}</td>
+                        ${shiftsAssigned.map(shift => `<td class="${shift.class}">${shift.text}</td>`).join("")}
+                    `;
+                    table.appendChild(row);
+                });
+
+                rotaContainer.innerHTML += `<h3>Week ${week}</h3>`;
+                rotaContainer.appendChild(table);
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+        <label for="night_minimum">Minimum Night Staff:</label>
+        <input type="number" id="night_minimum" value="2" required><br><br>
+
+        <button type="button" onclick="saveCareHomeDetails()">Save Care Home Details</button>
+    </form>
+
+    <!-- Form for adding staff details -->
+    <h2>Staff Details</h2>
+    <div id="staffFormsContainer"></div>
+    <button type="button" onclick="addStaffForm()">Add Another Staff</button>
+    <button type="button" onclick="saveStaff()">Save Staff</button>
+
+    <button onclick="generateRota()">Generate Rota</button>
+
+    <h2>Generated Rota</h2>
+    <div id="rotaOutput"></div>
+
+    <script>
+        let careHomeDetails = {};
+        let staffList = [];
+
+        function saveCareHomeDetails() {
+            careHomeDetails = {
+                care_home_name: document.getElementById("care_home_name").value,
+                day_care_hours: parseInt(document.getElementById("day_care_hours").value),
+                night_care_hours: parseInt(document.getElementById("night_care_hours").value),
+                day_minimum: parseInt(document.getElementById("day_minimum").value),
+                day_maximum: parseInt(document.getElementById("day_maximum").value),
+                night_minimum: parseInt(document.getElementById("night_minimum").value),
+            };
+            alert("Care home details saved successfully!");
+        }
+
+        function addStaffForm() {
+            const container = document.getElementById("staffFormsContainer");
+            const newForm = document.createElement("form");
+            newForm.classList.add("staffForm");
+            newForm.innerHTML = `
+                <label>Staff Name:</label>
+                <input type="text" class="name" required><br><br>
+
+                <label>Contracted Hours:</label>
+                <input type="number" class="contract_hours" required><br><br>
+
+                <label>Driver:</label>
+                <select class="is_driver">
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                </select><br><br>
+
+                <label>Shift Preference:</label>
+                <select class="shift_preference">
+                    <option value="Day">Day</option>
+                    <option value="Night">Night</option>
+                </select><br><br>
+                <hr>
+            `;
+            container.appendChild(newForm);
+        }
+
+        function saveStaff() {
+            const forms = document.querySelectorAll(".staffForm");
+            staffList = [];
+            forms.forEach((form) => {
+                const name = form.querySelector(".name").value;
+                const contract_hours = parseInt(form.querySelector(".contract_hours").value);
+                const is_driver = form.querySelector(".is_driver").value === "true";
+                const shift_preference = form.querySelector(".shift_preference").value;
+
+                staffList.push({ name, contract_hours, is_driver, shift_preference });
+            });
+            alert("Staff details saved successfully!");
+        }
+
+        function generateRota() {
+            const rotaContainer = document.getElementById("rotaOutput");
+            rotaContainer.innerHTML = ""; // Clear previous output
+
+            const weeks = 4;
+            const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+            const shifts = [
+                { label: "08:00-15:00", class: "light-pink", hours: 7 },
+                { label: "15:00-22:00", class: "light-blue", hours: 7 },
+                { label: "08:00-22:00", class: "half-pink-half-blue", hours: 14 }
+            ];
+
+            const nightShift = { label: "N", class: "green", hours: 10 };
+
+            for (let week = 1; week <= weeks; week++) {
+                const table = document.createElement("table");
+                const headerRow = document.createElement("tr");
+
+                headerRow.innerHTML = `
+                    <th>Staff Name</th>
+                    <th>Contracted Hours</th>
+                    ${days.map(day => `<th>${day}</th>`).join("")}
+                `;
+                table.appendChild(headerRow);
+
+                let totalDayCareHours = careHomeDetails.day_care_hours;
+                let totalNightCareHours = careHomeDetails.night_care_hours;
+
+                staffList.forEach((staff) => {
+                    const row = document.createElement("tr");
+                    const shiftsAssigned = [];
+                    let hoursRemaining = staff.contract_hours;
+
+                    days.forEach((_, dayIndex) => {
+                        if (staff.shift_preference === "Night" && totalNightCareHours > 0) {
+                            shiftsAssigned.push({ text: nightShift.label, class: nightShift.class });
+                            hoursRemaining -= nightShift.hours;
+                            totalNightCareHours -= nightShift.hours;
+                        } else if (staff.shift_preference === "Day" && totalDayCareHours > 0) {
+                            const shift = shifts[Math.floor(Math.random() * shifts.length)];
+                            shiftsAssigned.push({ text: shift.label, class: shift.class });
+                            hoursRemaining -= shift.hours;
+                            totalDayCareHours -= shift.hours;
+                        } else {
+                            shiftsAssigned.push({ text: "R", class: "white" });
+                        }
+                    });
+
+                    row.innerHTML = `
+                        <td>${staff.name}</td>
+                        <td>${staff.contract_hours}</td>
+                        ${shiftsAssigned.map(shift => `<td class="${shift.class}">${shift.text}</td>`).join("")}
+                    `;
+                    table.appendChild(row);
+                });
+
+                rotaContainer.innerHTML += `<h3>Week ${week}</h3>`;
+                rotaContainer.appendChild(table);
+            }
+        }
+    </script>
+</body>
+</html>
